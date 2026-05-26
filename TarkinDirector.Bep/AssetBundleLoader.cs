@@ -17,12 +17,12 @@ namespace tarkin.Director.EFTRuntime
     internal class LoadedBundleInfo
     {
         public AssetBundle Bundle { get; }
-        public Scene Scene { get; }
+        public List<Scene> Scenes { get; }
 
-        public LoadedBundleInfo(AssetBundle bundle, Scene scene)
+        public LoadedBundleInfo(AssetBundle bundle, List<Scene> scenes)
         {
             Bundle = bundle;
-            Scene = scene;
+            Scenes = scenes;
         }
     }
 
@@ -65,10 +65,18 @@ namespace tarkin.Director.EFTRuntime
 
             Plugin.Logger.LogInfo($"Unloading '{Path.GetFileName(fullPath)}'...");
 
-            if (info.Scene.isLoaded)
+            List<AsyncOperation> unloadOperations = new List<AsyncOperation>();
+            foreach (Scene scene in info.Scenes)
             {
-                AsyncOperation asyncOperation = SceneManager.UnloadSceneAsync(info.Scene);
-                while (!asyncOperation.isDone) yield return null;
+                if (scene.isLoaded)
+                {
+                    unloadOperations.Add(SceneManager.UnloadSceneAsync(scene));
+                }
+            }
+
+            foreach (var asyncOp in unloadOperations)
+            {
+                while (!asyncOp.isDone) yield return null;
             }
 
             info.Bundle.Unload(unloadAllLoadedObjects: false);
@@ -104,45 +112,61 @@ namespace tarkin.Director.EFTRuntime
             string[] scenePaths = assetBundle.GetAllScenePaths();
             if (scenePaths.Length == 0)
             {
-                loadedAssetBundles.Add(fullPath, new LoadedBundleInfo(assetBundle, default));
-                Plugin.Logger.LogWarning($"'{Path.GetFileName(fullPath)}' is not a scene bundle.");
+                loadedAssetBundles.Add(fullPath, new LoadedBundleInfo(assetBundle, new List<Scene>()));
+                Plugin.Logger.LogWarning($"'{Path.GetFileName(fullPath)}' contains no scenes.");
                 yield break;
             }
 
-            string sceneName = Path.GetFileNameWithoutExtension(scenePaths[0]);
-            AsyncOperation asyncOp = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
-            while (!asyncOp.isDone) yield return null;
+            List<Scene> loadedScenes = new List<Scene>();
+            bool needsAudioReinit = false;
 
-            Scene loadedScene = SceneManager.GetSceneByName(sceneName);
-            if (!loadedScene.isLoaded)
+            // Load every scene found in the bundle sequentially
+            foreach (string scenePath in scenePaths)
             {
-                Plugin.Logger.LogError($"Failed to load scene '{sceneName}' from bundle.");
-                assetBundle?.Unload(true);
-                yield break;
+                string sceneName = Path.GetFileNameWithoutExtension(scenePath);
+
+                AsyncOperation asyncOp = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
+                while (!asyncOp.isDone) yield return null;
+
+                Scene loadedScene = SceneManager.GetSceneByName(sceneName);
+                if (!loadedScene.isLoaded)
+                {
+                    Plugin.Logger.LogError($"Failed to load scene '{sceneName}' from bundle.");
+                    continue;
+                }
+
+                loadedScenes.Add(loadedScene);
+
+                // Notify coordinator
+                onSceneLoaded?.Invoke(loadedScene);
+
+                if (Plugin.ReplaceShaders.Value)
+                    ReplaceShadersToNative(loadedScene);
+
+                if (!needsAudioReinit && TryGetComponentInScene<SpatialAudioCrossSceneGroup>(loadedScene, out _))
+                {
+                    needsAudioReinit = true;
+                }
             }
 
-            // Notify coordinator that scene is loaded
-            onSceneLoaded?.Invoke(loadedScene);
-
-            var bundleInfo = new LoadedBundleInfo(assetBundle, loadedScene);
+            var bundleInfo = new LoadedBundleInfo(assetBundle, loadedScenes);
             loadedAssetBundles.Add(fullPath, bundleInfo);
 
-            if (Plugin.ReplaceShaders.Value)
-                ReplaceShadersToNative(loadedScene);
-
-            yield return null; // let instances register
+            yield return null; // Let Unity run Awakes/OnEnables for the new scenes
 
             UpdateDecals();
 
-            if (Plugin.SetActiveScene.Value)
-                SceneManager.SetActiveScene(loadedScene);
+            // We default to setting the first scene in the bundle as the active one
+            if (loadedScenes.Count > 0 && Plugin.SetActiveScene.Value)
+                SceneManager.SetActiveScene(loadedScenes[0]);
 
             if (Plugin.CleanDecals.Value && Singleton<Effects>.Instantiated)
                 Singleton<Effects>.Instance.ClearDecal();
 
-            yield return InitSpatialAudio(loadedScene);
+            if (needsAudioReinit)
+                yield return InitSpatialAudio();
 
-            Plugin.Logger.LogInfo($"'{Path.GetFileName(fullPath)}': Scene loaded successfully.");
+            Plugin.Logger.LogInfo($"'{Path.GetFileName(fullPath)}': Loaded {loadedScenes.Count} scene(s) successfully.");
         }
 
         private void UpdateDecals()
@@ -154,11 +178,11 @@ namespace tarkin.Director.EFTRuntime
             }
         }
 
-        private IEnumerator InitSpatialAudio(Scene scene)
+        private IEnumerator InitSpatialAudio()
         {
-            if (Singleton<SpatialAudioSystem>.Instantiated && TryGetComponentInScene<SpatialAudioCrossSceneGroup>(scene, out _))
+            if (Singleton<SpatialAudioSystem>.Instantiated)
             {
-                Plugin.Logger.LogInfo("Reinitializing SpatialAudioSystem...");
+                Plugin.Logger.LogInfo("Found SpatialAudioCrossSceneGroup. Reinitializing SpatialAudioSystem...");
                 yield return null;
 
                 Task task = Singleton<SpatialAudioSystem>.Instance.Initialize(CancellationToken.None, null);
@@ -203,7 +227,8 @@ namespace tarkin.Director.EFTRuntime
                     }
                 }
             }
-            Plugin.Logger.LogInfo($"Replaced {replacedShaderCount} shaders");
+            if (replacedShaderCount > 0)
+                Plugin.Logger.LogInfo($"Replaced {replacedShaderCount} shaders in scene '{scene.name}'");
         }
 
         public void Dispose()
@@ -214,12 +239,15 @@ namespace tarkin.Director.EFTRuntime
                 LoadedBundleInfo info = loadedAssetBundles[fullPath];
                 if (info != null && info.Bundle != null)
                 {
-                    if (info.Scene.isLoaded)
-                        SceneManager.UnloadScene(info.Scene); // unity docs says this is unsafe, but we have to do it wihtout Async because hot reloading might reload the plugin too soon
+                    foreach (Scene scene in info.Scenes)
+                    {
+                        if (scene.isLoaded)
+                            SceneManager.UnloadScene(scene); // unity docs says this is unsafe, but we have to do it wihtout Async because hot reloading might reload the plugin too soon
+                    }
 
                     info.Bundle.Unload(unloadAllLoadedObjects: false);
                 }
-                Plugin.Logger.LogInfo($"Synchronously unloaded '{Path.GetFileName(fullPath)}' for script reload.");
+                Plugin.Logger.LogInfo($"Synchronously unloaded bundle '{Path.GetFileName(fullPath)}' for script reload.");
             }
             loadedAssetBundles.Clear();
         }
