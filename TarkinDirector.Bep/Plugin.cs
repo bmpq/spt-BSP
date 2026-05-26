@@ -8,6 +8,8 @@ using SPT.Reflection.Patching;
 using Comfort.Common;
 using EFT;
 using System;
+using EFT.UI;
+using tarkin.BSP.Bep;
 
 namespace tarkin.Director.Bep
 {
@@ -52,6 +54,8 @@ namespace tarkin.Director.Bep
         private PatchManager patchManager;
         private BundleScenePlayer bundleScenePlayer;
 
+        private Action unregisterConsoleCommands;
+
         private IDisposable vidoe;
 
         private void Start()
@@ -70,13 +74,7 @@ namespace tarkin.Director.Bep
             patchManager = new PatchManager(this, autoPatch: true);
             patchManager.EnablePatches();
 
-            if (Singleton<GameWorld>.Instantiated)
-            {
-                Singleton<GameWorld>.Instance.MainPlayer.ActiveHealthController.ChangeHydration(30);
-                Singleton<GameWorld>.Instance.MainPlayer.ActiveHealthController.ChangeEnergy(30);
-                Singleton<GameWorld>.Instance.MainPlayer.ActiveHealthController.RestoreFullHealth();
-                Singleton<Systems.Effects.Effects>.Instance.ClearDecal();
-            }
+            unregisterConsoleCommands = ConsoleScreen.Processor.RegisterCommandGroup<ConsoleCommands>();
 
             //vidoe = new OriginalSceneLoader();
         }
@@ -124,6 +122,8 @@ namespace tarkin.Director.Bep
             GameObject.Destroy(bundleScenePlayer.gameObject);
 
             patchManager.DisablePatches();
+
+            unregisterConsoleCommands.Invoke();
 
             BepInEx.Logging.Logger.Sources.Remove(Logger);
             Logger = null;
