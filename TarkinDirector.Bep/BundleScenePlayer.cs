@@ -227,6 +227,14 @@ namespace tarkin.Director.EFTRuntime
             info.Bundle.Unload(unloadAllLoadedObjects: false);
             loadedAssetBundles.Remove(fullPath);
 
+            yield return null;
+
+            if (StaticDeferredDecalRenderer.Instance != null)
+            {
+                try { StaticDeferredDecalRenderer.Instance.UpdateInstancesBuffers(); }
+                catch { }
+            }
+
             Resources.UnloadUnusedAssets();
 
             Plugin.Logger.LogInfo($"Unloaded '{Path.GetFileName(fullPath)}'");
@@ -255,8 +263,8 @@ namespace tarkin.Director.EFTRuntime
             string[] scenePaths = assetBundle.GetAllScenePaths();
             if (scenePaths.Length == 0)
             {
-                Plugin.Logger.LogError($"'{Path.GetFileName(fullPath)}' is not a scene bundle! Unloading...");
-                assetBundle?.Unload(false);
+                loadedAssetBundles.Add(fullPath, new LoadedBundleInfo(assetBundle, default));
+                Plugin.Logger.LogWarning($"'{Path.GetFileName(fullPath)}' is not a scene bundle.");
                 yield break;
             }
 
@@ -281,7 +289,8 @@ namespace tarkin.Director.EFTRuntime
             var bundleInfo = new LoadedBundleInfo(assetBundle, loadedScene);
             loadedAssetBundles.Add(fullPath, bundleInfo);
 
-            ReplaceShadersToNative(loadedScene);
+            if (Plugin.ReplaceShaders.Value)
+                ReplaceShadersToNative(loadedScene);
 
             yield return null; // let StaticDeferredDecal instances register themselves in OnEnable()
 
