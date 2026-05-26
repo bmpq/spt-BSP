@@ -4,37 +4,31 @@ using UnityEngine.Events;
 
 namespace tarkin.Director
 {
-    [RequireComponent(typeof(Collider))]
     public class PhysicsTrigger : MonoBehaviour
+#if EFT_RUNTIME
+        , IPhysicsTrigger
+#endif
     {
-        public enum Condition
-        {
-            Enter,
-            Exit
-        }
+        public string Description => nameof(PhysicsTrigger);
 
-        [Space(10)]
-        [SerializeField]
-        private Condition condition;
+        [SerializeField] private UnityEvent unityEventEnter;
+        [SerializeField] private UnityEvent unityEventExit;
 
-        [SerializeField]
-        private UnityEvent unityEvent;
 
         void OnValidate()
         {
+            gameObject.layer = 13; // Triggers
             GetComponent<Collider>().isTrigger = true;
         }
 
-        void OnTriggerEnter(Collider other)
+        public void OnTriggerEnter(Collider other)
         {
-            if (condition == Condition.Enter)
-                unityEvent.Invoke();
+            unityEventEnter.Invoke();
         }
 
-        void OnTriggerExit(Collider other)
+        public void OnTriggerExit(Collider other)
         {
-            if (condition == Condition.Exit)
-                unityEvent.Invoke();
+            unityEventExit.Invoke();
         }
     }
 }

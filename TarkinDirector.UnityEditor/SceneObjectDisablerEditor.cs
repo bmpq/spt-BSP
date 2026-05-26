@@ -80,7 +80,6 @@ namespace tarkin.Director.EditorTools
             EditorGUILayout.ObjectField(disablerInstance, typeof(SceneObjectDisabler), true);
             EditorGUI.EndDisabledGroup();
 
-            EditorGUILayout.PropertyField(serializedDisabler.FindProperty("mode"));
             EditorGUILayout.PropertyField(serializedDisabler.FindProperty("delay"));
 
 

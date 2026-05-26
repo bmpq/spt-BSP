@@ -7,36 +7,29 @@ namespace tarkin.Director
 {
     public class SceneObjectDisabler : MonoBehaviour
     {
-        public Mode mode;
-
-        public enum Mode
-        {
-            DisableTemporary,
-            DisablePermanent,
-            Destroy
-        }
-
         public List<string> pathsToDisable;
 
         public float delay;
 
         Dictionary<GameObject, bool> originalStates = new Dictionary<GameObject, bool>();
 
-        void Start()
+        Coroutine coroutine;
+
+        void OnEnable()
         {
-            StartCoroutine(DisableObjectsRoutine());
+            coroutine = StartCoroutine(DisableObjectsRoutine());
         }
 
-        void OnDestroy()
+        void OnDisable()
         {
-            if (mode == Mode.DisableTemporary)
+            if (coroutine != null)
+                StopCoroutine(coroutine);
+
+            foreach (var kvp in originalStates)
             {
-                foreach (var kvp in originalStates)
+                if (kvp.Key != null)
                 {
-                    if (kvp.Key != null)
-                    {
-                        kvp.Key.SetActive(kvp.Value);
-                    }
+                    kvp.Key.SetActive(kvp.Value);
                 }
             }
         }
@@ -61,20 +54,10 @@ namespace tarkin.Director
                     {
                         if (targetObject != null)
                         {
-                            switch (mode)
-                            {
-                                case Mode.Destroy:
-                                    Destroy(targetObject);
-                                    break;
-                                case Mode.DisableTemporary:
-                                    if (!originalStates.ContainsKey(targetObject))
-                                        originalStates.Add(targetObject, targetObject.activeSelf);
-                                    targetObject.SetActive(false);
-                                    break;
-                                case Mode.DisablePermanent:
-                                    targetObject.SetActive(false);
-                                    break;
-                            }
+                            if (!originalStates.ContainsKey(targetObject))
+                                originalStates.Add(targetObject, targetObject.activeSelf);
+                            targetObject.SetActive(false);
+
                             totalObjectsAffected++;
                         }
                     }
