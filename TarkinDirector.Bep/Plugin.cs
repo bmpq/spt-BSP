@@ -5,6 +5,9 @@ using UnityEngine;
 using System.Collections.Generic;
 using tarkin.Director.EFTRuntime;
 using SPT.Reflection.Patching;
+using Comfort.Common;
+using EFT;
+using System;
 
 namespace tarkin.Director.Bep
 {
@@ -22,6 +25,7 @@ namespace tarkin.Director.Bep
         internal static ConfigEntry<string> PrewarmAssemblies;
         internal static ConfigEntry<bool> DisplayLogInGame;
         internal static ConfigEntry<bool> CleanDecals;
+        internal static ConfigEntry<bool> ReplaceShaders;
         internal static ConfigEntry<bool> SetActiveScene;
 
         internal static ConfigEntry<bool> InfiniteAmmo;
@@ -29,7 +33,7 @@ namespace tarkin.Director.Bep
         internal static ConfigEntry<bool> OverrideMalfunctionChance;
         internal static ConfigEntry<float> OverrideMalfunctionChanceFactor;
 
-        private const int MAX_BUNDLE_SLOTS = 8;
+        private const int MAX_BUNDLE_SLOTS = 5;
         internal static List<ConfigEntry<string>> BundleSlots = new List<ConfigEntry<string>>();
 
         public static List<string> GetConfiguredBundlePaths()
@@ -48,6 +52,8 @@ namespace tarkin.Director.Bep
         private PatchManager patchManager;
         private BundleScenePlayer bundleScenePlayer;
 
+        private IDisposable vidoe;
+
         private void Start()
         {
             InitConfiguration();
@@ -63,6 +69,16 @@ namespace tarkin.Director.Bep
 
             patchManager = new PatchManager(this, autoPatch: true);
             patchManager.EnablePatches();
+
+            if (Singleton<GameWorld>.Instantiated)
+            {
+                Singleton<GameWorld>.Instance.MainPlayer.ActiveHealthController.ChangeHydration(30);
+                Singleton<GameWorld>.Instance.MainPlayer.ActiveHealthController.ChangeEnergy(30);
+                Singleton<GameWorld>.Instance.MainPlayer.ActiveHealthController.RestoreFullHealth();
+                Singleton<Systems.Effects.Effects>.Instance.ClearDecal();
+            }
+
+            //vidoe = new OriginalSceneLoader();
         }
 
         private void InitConfiguration()
@@ -90,6 +106,7 @@ namespace tarkin.Director.Bep
 
             DisplayLogInGame = Config.Bind("General", "DisplayLogInGame", true);
             CleanDecals = Config.Bind("General", "CleanDecalsOnLoad", true);
+            ReplaceShaders = Config.Bind("General", "ReplaceShaders", false);
             SetActiveScene = Config.Bind("General", "SetActiveScene", false);
 
             InfiniteAmmo = Config.Bind("Gameplay", "InfiniteAmmo", false);
@@ -99,6 +116,11 @@ namespace tarkin.Director.Bep
 
         void OnDestroy()
         {
+            try
+            {
+                vidoe?.Dispose();
+            } catch { }
+
             GameObject.Destroy(bundleScenePlayer.gameObject);
 
             patchManager.DisablePatches();

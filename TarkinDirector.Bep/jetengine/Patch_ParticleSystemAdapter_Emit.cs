@@ -5,8 +5,9 @@ using System.Reflection;
 using UnityEngine;
 using static UnityEngine.ParticleSystem;
 
-namespace tarkin.Director.Bep.Patches
+namespace tarkin.Director.Bep.jetengine
 {
+#if KJHBKREJHEVKJGRLKJHCGKJHR
     internal class Patch_ParticleSystemAdapter_Emit : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
@@ -86,4 +87,5 @@ namespace tarkin.Director.Bep.Patches
             velocity += new Vector3(0,0, -10);
         }
     }
+#endif
 }
