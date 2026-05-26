@@ -5,7 +5,7 @@ using System.Reflection;
 using UnityEngine;
 using static UnityEngine.ParticleSystem;
 
-namespace tarkin.Director.Bep.jetengine
+namespace tarkin.Director.Bep.VideoSpecificScripts.jetengine
 {
 #if KJHBKREJHEVKJGRLKJHCGKJHR
     internal class Patch_ParticleSystemAdapter_Emit : ModulePatch

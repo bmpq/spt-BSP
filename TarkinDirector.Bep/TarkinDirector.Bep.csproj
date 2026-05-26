@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <RootNamespace>tarkin.Director.Bep</RootNamespace>
+    <RootNamespace>tarkin.Director.EFTRuntime</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

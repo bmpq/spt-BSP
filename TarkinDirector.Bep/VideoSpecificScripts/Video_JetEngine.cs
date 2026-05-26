@@ -10,7 +10,7 @@ using Systems.Effects;
 using tarkin.Director.Shared;
 using UnityEngine;
 
-namespace tarkin.Director.Bep
+namespace tarkin.Director.Bep.VideoSpecificScripts
 {
     internal class Video_JetEngine : IDisposable
     {
